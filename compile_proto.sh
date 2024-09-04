@@ -9,13 +9,13 @@
 
 its_proto_dir="/Users/didi/AndroidStudioProjects/its-proto"
 cd $its_proto_dir
-PROTO_DIR=.
-JAVA_OUT_DIR=./javaOut
+# PROTO_DIR=.
+JAVA_OUT_DIR="/Users/didi/AndroidStudioProjects/its-proto/javaOut"
 
 # 找到所有的 .proto 文件并编译
-java -jar /Users/didi/scripts/wire-compiler-1.8.0-jar-with-dependencies.jar \
-    --proto_path=$PROTO_DIR \
+/Users/didi/.jenv/shims/java -jar /Users/didi/scripts/wire-compiler-1.8.0-jar-with-dependencies.jar  \
+    --proto_path=$its_proto_dir \
     --java_out=$JAVA_OUT_DIR \
-    $(find $PROTO_DIR -name '*.proto')
+    $(find ../ -name  "*.proto")
 
 echo "Compilation complete. Java files are saved in $JAVA_OUT_DIR"

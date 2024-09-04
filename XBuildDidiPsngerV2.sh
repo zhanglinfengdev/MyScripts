@@ -83,7 +83,9 @@ else
         echo "APK 启动耗时: ${LAUNCH_TIME}ms"
         END_TIME=$(date +%s) # Correctly capture the current time in nanoseconds
         TOTAL_TIME=$((END_TIME - START_TIME)) # Calculate the difference
-        echo "总耗时: $(($TOTAL_TIME / 60)) 分钟 $(($TOTAL_TIME % 60)) 秒" # Convert nanoseconds to milliseconds
+        echoMsg="总耗时: $(($TOTAL_TIME / 60)) 分钟 $(($TOTAL_TIME % 60)) 秒" # Convert nanoseconds to milliseconds
+        ~/scripts/smsg.sh "${echoMsg}"
+        echo ${echoMsg}
     else
         echo "启动时间未知，输出信息如下:"
         echo "$LAUNCH_OUTPUT"
