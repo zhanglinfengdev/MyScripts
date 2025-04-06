@@ -84,7 +84,9 @@ else
   # 创建文件
   touch "$wrFile"
   # echo "$prefix" >> "$wrFile"
-  echo "                 $prefix-周报" >> "$wrFile"
+  # ## <font color="orange"><center>2024年第36周-09月02日～09月08日-周报&darr;</center></font>
+  # echo "                 $prefix-周报" >> "$wrFile"
+  echo "## <font color="orange"><center> $prefix-周报&darr; </center></font>" >> "$wrFile"
   echo "文件 $wrFile 已创建。"
 fi
 

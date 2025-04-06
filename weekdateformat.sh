@@ -35,3 +35,7 @@ fi
 source /Users/didi/.zshrc
 
 /usr/local/bin/kitty --config ~/.config/kitty/kitty.conf  nvim -u /Users/didi/.config/nvim/init.vim  $wrFile
+# echo "$!" >> "/Users/didi/.config/sketchybar/kypids/.weeklyreport"
+
+
+

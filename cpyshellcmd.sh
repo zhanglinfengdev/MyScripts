@@ -1,4 +1,7 @@
-osascript -e 'tell application "System Events" to key code 103'
+
+"fjkdslfjkdslfjk" >> ~/fafafa.txt
+
+/usr/bin/osascript -e 'tell application "System Events" to key code 103'
 
 
 # notifyMe() {
@@ -7,7 +10,7 @@ osascript -e 'tell application "System Events" to key code 103'
 
 # notifyMe "enhance switch" "enhance"
 
-osascript  <<EOF
+/usr/bin/osascript  <<EOF
     display notification "$(pbpaste)" with title "copyshellcmd"
 EOF
 

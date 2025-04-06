@@ -2,6 +2,7 @@
 
 # 设定拼音输入法和英语键盘的输入法标识符
 PINYIN_IM="com.apple.inputmethod.SCIM.Shuangpin"
+# PINYIN_IM="im.rime.inputmethod.Squirrel.Hans"
 ENGLISH_IM="com.apple.keylayout.US"
 
 # 获取当前输入法标识符

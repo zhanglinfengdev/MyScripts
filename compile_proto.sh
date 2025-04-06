@@ -16,6 +16,8 @@ JAVA_OUT_DIR="/Users/didi/AndroidStudioProjects/its-proto/javaOut"
 /Users/didi/.jenv/shims/java -jar /Users/didi/scripts/wire-compiler-1.8.0-jar-with-dependencies.jar  \
     --proto_path=$its_proto_dir \
     --java_out=$JAVA_OUT_DIR \
-    $(find ../ -name  "*.proto")
+    $(find $its_proto_dir -name "*.proto" | sed "s|.*/its-proto/||")
+
+    # $(find $its_proto_dir -name  "*.proto")
 
 echo "Compilation complete. Java files are saved in $JAVA_OUT_DIR"

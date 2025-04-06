@@ -23,15 +23,26 @@ input_text=$(osascript /Users/didi/scripts/prompt_input.applescript "newRdProfil
 
 
 
-if [ ! -z "$input_text" ]
+if [ ! -z "$input_text" ];
 then
+    lineno=1;name="";des="";version="";coms="";
+    while IFS= read -r line; do
+        if [ $lineno -eq 1 ]; then
+            name=$line;
+        elif [ $lineno -eq 2 ]; then
+            des=$line;
+        elif [ $lineno -eq 3 ]; then
+            version=$line;
+        elif [ $lineno -eq 4 ]; then
+            coms=$line;
+        fi
+        ((lineno++))
+    done <<< "$input_text"
 
     /Users/didi/scripts/TZ.sh
-    prefix="$(pbpaste)-$input_text"
+    prefix="$(pbpaste)-$name"
     prdFile="/Users/didi/Documents/RdProfiles/$prefix.prd"
     kimiPrdFile="/Users/didi/Documents/WeeklyReport/$prefix-kimi.prd"
-
-
 
 
 
@@ -45,6 +56,13 @@ then
         touch "$prdFile"
         echo "文件 $prdFile 已创建。"
     fi
+
+
+    echo "" > $prdFile
+    echo "需求:$name" >> $prdFile
+    echo "简述:$des" >> $prdFile
+    echo "跟版:$version" >> $prdFile
+    echo "相关组件:$coms" >> $prdFile
 
 
 # /usr/local/bin/sketchybar --set com.weeklyreport icon="Polishing"

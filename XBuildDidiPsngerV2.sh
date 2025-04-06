@@ -3,7 +3,9 @@
 # 设置环境变量
 cd /Users/didi/AndroidStudioProjects/Quattro
 
-export JAVA_HOME=/Users/didi/Library/Java/JavaVirtualMachines/corretto-11.0.21/Contents/Home
+export JAVA_HOME=/usr/local/Cellar/openjdk@11/11.0.25/libexec/openjdk.jdk/Contents/Home
+export JAVA_HOME=/Users/didi/Library/Java/JavaVirtualMachines/corretto-15.0.2/Contents/Home
+export JAVA_HOME=/Users/didi/Library/Java/JavaVirtualMachines/corretto-17.0.14/Contents/Home
 
 # Set the Gradle options once
 GRADLE_OPTS="-Dorg.gradle.daemon=true -Dorg.gradle.parallel=true -Dorg.gradle.configureondemand=true"
@@ -13,7 +15,7 @@ APK_CREATOR_OPTS="-Pandroid.useNewApkCreator=false"
 
 echo "正在清理项目..."
 # Consider only cleaning when necessary to avoid extra work
-# ./gradlew clean $GRADLE_OPTS
+./gradlew clean $GRADLE_OPTS
 
 echo "正在执行 Gradle 同步..."
 ./gradlew --refresh-dependencies $GRADLE_OPTS
