@@ -1,0 +1,79 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.example.mylibrary">
+
+    <application>
+        <provider
+            android:name=".internal.LibraryInitProvider"
+            android:authorities="${applicationId}.LibraryInitProvider"
+            android:exported="false" />
+    </application>
+</manifest>
+
+
+package com.example.mylibrary.internal
+
+import android.app.Application
+import android.content.ContentProvider
+import android.content.ContentValues
+import android.content.Context
+import android.database.Cursor
+import android.net.Uri
+
+internal class LibraryInitProvider : ContentProvider() {
+
+    companion object {
+        // 静态存储 Application Context
+        lateinit var appContext: Context
+            private set // 只允许内部设置
+
+        // 如果确实需要 Application 实例 (谨慎!)
+         lateinit var application: Application
+             private set
+    }
+
+    override fun onCreate(): Boolean {
+        val context = context
+        if (context != null) {
+            appContext = context.applicationContext
+            if (appContext is Application) {
+               application = appContext as Application
+            } else {
+                // 理论上 appContext 总是 Application 的实例，但做个保护
+                // 如果不是，则 application 可能无法被正确赋值
+                // 这种情况非常罕见
+                println("Warning: Could not obtain Application instance via ContentProvider.")
+            }
+            // 在这里可以执行库的早期初始化逻辑
+            println("LibraryInitProvider: Context obtained - $appContext")
+        } else {
+             println("Error: LibraryInitProvider context is null during onCreate.")
+        }
+        // 返回 true 表示 Provider 加载成功
+        return true
+    }
+
+    // 其他 ContentProvider 的方法，通常不需要实现具体逻辑
+    override fun query(uri: Uri, projection: Array<String>?, selection: String?, selectionArgs: Array<String>?, sortOrder: String?): Cursor? = null
+    override fun getType(uri: Uri): String? = null
+    override fun insert(uri: Uri, values: ContentValues?): Uri? = null
+    override fun delete(uri: Uri, selection: String?, selectionArgs: Array<String>?): Int = 0
+    override fun update(uri: Uri, values: ContentValues?, selection: String?, selectionArgs: Array<String>?): Int = 0
+}
+
+// 在库的其他地方可以这样访问
+object LibraryContextProvider {
+    fun getContext(): Context {
+        if (!::appContext.isInitialized) {
+             // 理论上不应该发生，因为ContentProvider会先初始化
+             throw IllegalStateException("Library not initialized correctly via ContentProvider.")
+        }
+        return LibraryInitProvider.appContext
+    }
+
+     fun getApplication(): Application {
+         if (!::application.isInitialized) {
+             throw IllegalStateException("Library not initialized correctly or Application instance unavailable.")
+         }
+         return LibraryInitProvider.application
+     }
+}
