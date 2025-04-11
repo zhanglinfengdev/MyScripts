@@ -10,6 +10,7 @@ export JAVA_HOME=/Users/didi/Library/Java/JavaVirtualMachines/corretto-15.0.2/Co
 declare -A project_dirs
 declare -A version_keys   # Key for the version property (e.g., "version")
 declare -A gradle_configs # How to execute gradle ('wrapper', 'global', 'sdk:X.Y', '/path/to/gradle')
+declare -A gradle_jvm # How to execute gradle ('wrapper', 'global', 'sdk:X.Y', '/path/to/gradle')
 # NEW: Keys for Group and Artifact ID properties in gradle.properties
 declare -A group_keys       # Key for the GROUP property (e.g., "GROUP")
 declare -A artifact_id_keys # Key for the ARTIFACT_ID property (e.g., "ARTIFACT_ID")
@@ -21,11 +22,11 @@ DEFAULT_ARTIFACT_ID_KEY="ARTIFACT_ID"
 
 # === ADD/MODIFY YOUR CONFIGURATIONS BELOW ===
 
-project_dirs["MapFlowView"]="/Users/didi/AndroidStudioProjects/MapFlowView"
-version_keys["MapFlowView"]="VERSION"         # Must match the key in projectA's gradle.properties
-group_keys["MapFlowView"]="GROUP_ID"          # Must match the key in projectA's gradle.properties
-artifact_id_keys["MapFlowView"]="ARTIFACT_ID" # Must match the key in projectA's gradle.properties
-gradle_configs["MapFlowView"]="wrapper"
+project_dirs["sdk"]="/Users/didi/AndroidStudioProjects/MapFlowView"
+version_keys["sdk"]="VERSION"         # Must match the key in projectA's gradle.properties
+group_keys["sdk"]="GROUP_ID"          # Must match the key in projectA's gradle.properties
+artifact_id_keys["sdk"]="ARTIFACT_ID" # Must match the key in projectA's gradle.properties
+gradle_configs["sdk"]="wrapper"
 
 project_dirs["sync-trip-sdk"]="/Users/didi/AndroidStudioProjects/DiDiSyncTripSDK"
 version_keys["sync-trip-sdk"]="VERSION"         # Must match the key in projectA's gradle.properties
@@ -43,7 +44,8 @@ project_dirs["mappoiselect"]="/Users/didi/AndroidStudioProjects/map_poi_select"
 version_keys["mappoiselect"]="VERSION"         # Must match the key in projectA's gradle.properties
 group_keys["mappoiselect"]="GROUP_ID"          # Must match the key in projectA's gradle.properties
 artifact_id_keys["mappoiselect"]="ARTIFACT_ID" # Must match the key in projectA's gradle.properties
-gradle_configs["mappoiselect"]="wrapper"
+gradle_configs["mappoiselect"]="/Users/didi/.gradle/wrapper/dists/gradle-6.5-all/4061lg9ykbxtf8xnyo6cpg8pp/gradle-6.5"
+gradle_jvm["mappoiselect"]="/Users/didi/Library/Java/JavaVirtualMachines/corretto-1.8.0_442/Contents/Home"
 
 project_dirs["andoid_common_poi_selecter"]="/Users/didi/AndroidStudioProjects/andoid_common_poi_selecter"
 version_keys["andoid_common_poi_selecter"]="VERSION"         # Must match the key in projectA's gradle.properties
@@ -160,6 +162,7 @@ for config_name in "$@"; do
   group_key_prop=${group_keys["$config_name"]:-"$DEFAULT_GROUP_KEY"}
   artifact_id_key_prop=${artifact_id_keys["$config_name"]:-"$DEFAULT_ARTIFACT_ID_KEY"}
   gradle_config_value=${gradle_configs["$config_name"]:-"wrapper"}
+  gradle_jvm_home=${gradle_jvm["$config_name"]:-"$JAVA_HOME"}
 
   if [ ! -d "$PROJECT_DIR" ]; then
     error_msg "$config_name" "工程目录 '$PROJECT_DIR' 不存在。"
@@ -219,9 +222,12 @@ for config_name in "$@"; do
     ;;
   /* | ~*)
     eval expanded_gradle_path="$gradle_config_value"
-    if [ -f "$expanded_gradle_path" ] && [ -x "$expanded_gradle_path" ]; then
-      gradle_command="$expanded_gradle_path"
-      gradle_command_source_info="指定路径 ($expanded_gradle_path)"
+    if [ -f "$expanded_gradle_path/bin/gradle" ] && [ -x "$expanded_gradle_path/bin/gradle" ]; then
+      if [ -f gradle_jvm_home]; then
+        export JAVA_HOME="$gradle_jvm_home"
+      fi
+        gradle_command="$expanded_gradle_path/bin/gradle"
+        gradle_command_source_info="指定路径 ($expanded_gradle_path)"
     else
       error_msg "$config_name" "指定路径 '$expanded_gradle_path' 未找到或不可执行。"
       overall_success=false

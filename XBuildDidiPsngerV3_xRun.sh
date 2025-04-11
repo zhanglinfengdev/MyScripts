@@ -2,6 +2,13 @@
 
 # buildSublib
 /Users/didi/scripts/update_version_and_upload.sh $@
+if [ $? -eq 0 ]; then
+  echo "模块:$@构建成功"
+  # exit 0
+else
+  echo "模块:$@构建失败"
+  exit 1
+fi
 
 # /usr/bin/git checkout -- /Users/didi/AndroidStudioProjects/Quattro/quattro/build.gradle
 

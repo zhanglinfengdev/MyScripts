@@ -38,6 +38,7 @@ yabai -m window --focus stack.next
 widDif=$(yabai -m query --windows --window | jq '.frame.w - 473')
 
 yabai -m window --resize left:"$widDif":0
+yabai -m window --resize bottom:0:$(($widDif)*2)
 
 # yabai -m window --resize left:"$widDif":0
 
