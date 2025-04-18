@@ -1,17 +1,13 @@
-#!/bin/bash
-
-
-
+#!/bin/zsh
 
 # sketchybar --add item com.versions   left                   \
 #            --set com.versions "${com_versions[@]}"          \
-                                                            # \
-           # --add item apple.prefs1    popup.com.versions     \
-           # --set apple.prefs "${apple_prefs1[@]}"           \
-           #                                                  \
-           # --add item apple.activity1 popup.com.versions     \
-           # --set apple.activity "${apple_activity1[@]}"
-
+# \
+# --add item apple.prefs1    popup.com.versions     \
+# --set apple.prefs "${apple_prefs1[@]}"           \
+#                                                  \
+# --add item apple.activity1 popup.com.versions     \
+# --set apple.activity "${apple_activity1[@]}"
 
 alias sketchybar=/usr/local/bin/sketchybar
 
@@ -23,85 +19,77 @@ version_item=(
   # click_script="echo $date_no_space | pbcopy; $POPUP_OFF"
 )
 
-
-
 directory="/Users/didi/AndroidStudioProjects"
 suffix="properties"
 keyword1="ARTIFACT_ID"
 keyword2="VERSION="
 
-
-
 echo $NAME
 # 指定搜索深度
 depth=4
 
-
 # dateL=$(cat "/Users/didi/.config/sketchybar/com.versions.dot")
 # /usr/local/bin/sketchybar --set com.versions label="$dateL"
 
-    # --set com.retime "${version_item[@]}"           \
-    # --set com.retime label="􁆸 LTime:$dateL"    \
-    # --set com.retime click_script="echo $dateL | pbcopy; $POPUP_OFF"
+# --set com.retime "${version_item[@]}"           \
+# --set com.retime label="􁆸 LTime:$dateL"    \
+# --set com.retime click_script="echo $dateL | pbcopy; $POPUP_OFF"
 
 $(echo cat ~/aaaaa11111111.txt | awk -F'=' '{print $NF}')
 
 /usr/local/bin/sketchybar --remove popup.com.versions
 
-echo -n " " > ~/aaaaa11111111.txt
+echo -n " " >~/aaaaa11111111.txt
 
 recentC=""
 
 # 使用find命令递归搜索目录并找到包含关键字的文件，使用ls -lt命令按照修改时间排序
 # for file in $(find $directory -maxdepth $depth -type f -name "*.$suffix" -mtime -7 -exec grep -wrl -e $keyword1 -e $keyword2 {} \; | xargs ls -lt | awk '{print $9}')
 # for file in $(find $directory -maxdepth $depth -type f -name "*.$suffix" -mtime -61 -exec grep -wrl -e $keyword1 -e $keyword2 {} \; | xargs ls -lt | awk '{print $9}')
-for file in $(find "$directory" -maxdepth "$depth" -type f -name "*.$suffix" -mtime -61 -exec grep -wl -e "$keyword1" -e "$keyword2" {} + | xargs -r ls -lt)
-# for file in $(find $directory -type f -name "*.$suffix" -mtime -7 -print0 | xargs -0 -P 4 grep -Frl -e $keyword1 -e $keyword2    | xargs -0 ls -lt | cut -f 9-)
-do
+for file in $(
+  # for file in $(find $directory -type f -name "*.$suffix" -mtime -7 -print0 | xargs -0 -P 4 grep -Frl -e $keyword1 -e $keyword2    | xargs -0 ls -lt | cut -f 9-)
+  find "$directory" -maxdepth "$depth" -type f -name "*.$suffix" -mtime -61 -exec grep -wl -e "$keyword1" -e "$keyword2" {} + | xargs -r ls -lt
+); do
 
+  # 使用stat命令获取最后修改时间
+  # modified_time=$(date -r $(stat -f "%m" $file) "+%m月%d日%H时%M分%S秒")
+  modified_time=$(date -r $(stat -f "%m" $file) "+%m月%d日%H时%M分%S秒")
 
-   # 使用stat命令获取最后修改时间
-   # modified_time=$(date -r $(stat -f "%m" $file) "+%m月%d日%H时%M分%S秒")
-   modified_time=$(date -r $(stat -f "%m" $file) "+%m月%d日%H时%M分%S秒")
+  # 使用grep命令获取包含关键字的行
+  line_content1=$(grep -E '^[[:space:]]*'"$keyword1" $file)
+  line_content2=$(grep -E '^[[:space:]]*'"$keyword2" $file)
 
-   # 使用grep命令获取包含关键字的行
-   line_content1=$(grep -E '^[[:space:]]*'"$keyword1" $file )
-   line_content2=$(grep -E '^[[:space:]]*'"$keyword2" $file )
+  # 如果找到了包含关键字的行，才打印输出
+  if [ ! -z "$line_content1" -a ! -z "$line_content2" ]; then
 
-   # 如果找到了包含关键字的行，才打印输出
-   if [ ! -z "$line_content1" -a ! -z "$line_content2" ]
-   then
+    # 使用awk命令分割字符串并获取最后一个等号后的部分
+    artifact_id=$(echo $line_content1 | awk -F'=' '{print $NF}')
+    version=$(echo $line_content2 | awk -F'=' '{print $NF}')
 
-       # 使用awk命令分割字符串并获取最后一个等号后的部分
-       artifact_id=$(echo $line_content1 | awk -F'=' '{print $NF}')
-       version=$(echo $line_content2 | awk -F'=' '{print $NF}')
+    # 拼接两个字符串
+    result="$modified_time:${artifact_id}=${version}"
 
-       # 拼接两个字符串
-       result="$modified_time:${artifact_id}=${version}"
+    if [ -z "$recentC" ]; then
+      # last=$(echo $version | cut -d. -f$(echo $version | tr . '\n' | wc -l))
+      # last=$(echo $version | rev | cut -d. -f2- | rev)
+      recentC="$artifact_id/$version"
+    fi
+    # /usr/local/bin/sketchybar --remove $file
 
-       if [ -z "$recentC" ]
-       then
-           # last=$(echo $version | cut -d. -f$(echo $version | tr . '\n' | wc -l))
-           # last=$(echo $version | rev | cut -d. -f2- | rev)
-           recentC="$artifact_id/$version";
-       fi
-       # /usr/local/bin/sketchybar --remove $file
+    /usr/local/bin/sketchybar --add item $file popup.com.versions \
+      --set $file "${version_item[@]}" \
+      --set $file label="$result" \
+      --set $file click_script="echo '${artifact_id} ${version}' | pbcopy; $POPUP_OFF"
 
-       /usr/local/bin/sketchybar --add item $file popup.com.versions  \
-           --set $file "${version_item[@]}"                           \
-           --set $file label="$result"                                \
-           --set $file click_script="echo '${artifact_id} ${version}' | pbcopy; $POPUP_OFF"
+    # echo -n $file >> ~/aaaaa11111111.txt
+    # echo -n " " >> ~/aaaaa11111111.txt
 
-
-       # echo -n $file >> ~/aaaaa11111111.txt
-       # echo -n " " >> ~/aaaaa11111111.txt
-
-      # echo "File: $file"
-      # echo "Last modified: $modified_time"
-      # echo "Line with '$keyword1': $line_content1"
-      # echo "Line with '$keyword2': $line_content2"
-      # echo "------------------------"
-   fi
+    # echo "File: $file"
+    # echo "Last modified: $modified_time"
+    # echo "Line with '$keyword1': $line_content1"
+    # echo "Line with '$keyword2': $line_content2"
+    # echo "------------------------"
+  fi
 done
 
 # /usr/local/bin/sketchybar --set com.versions label="$dateL/$recentC"
@@ -117,15 +105,7 @@ done
 D=$(TZ="Asia/Shanghai" date "+%H:%M:%S")
 /usr/local/bin/sketchybar --set com.versions label="$D:$recentC"
 
-
-
-
-
-
 # /Users/didi/scripts/updateWrContent.sh
-
-
-
 
 # POPUP_OFFWR='/usr/local/bin/sketchybar --set com.weeklyreport popup.drawing=off'
 # # 获取当前年份
@@ -152,11 +132,6 @@ D=$(TZ="Asia/Shanghai" date "+%H:%M:%S")
 
 # /usr/local/bin/sketchybar --set com.weeklyreport label="${week}周"
 
-
-
-
-
-
 # # 检查文件是否存在
 # if [ -f "$NAME-wrpitems.dot" ]; then
 
@@ -167,8 +142,6 @@ D=$(TZ="Asia/Shanghai" date "+%H:%M:%S")
 #   done < "$NAME-wrpitems.dot"
 
 # fi
-
-
 
 # echo '' > "$NAME-wrpitems.dot"
 # # 检查文件是否存在
@@ -190,7 +163,35 @@ D=$(TZ="Asia/Shanghai" date "+%H:%M:%S")
 #   # curWrContent=$(cat "$wrFile")
 #   # /usr/local/bin/sketchybar --set com.wrcontent label="$curWrContent"
 # fi
-
-
-
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
 

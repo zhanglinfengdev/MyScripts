@@ -47,23 +47,25 @@ artifact_id_keys["mappoiselect"]="ARTIFACT_ID" # Must match the key in projectA'
 gradle_configs["mappoiselect"]="/Users/didi/.gradle/wrapper/dists/gradle-6.5-all/4061lg9ykbxtf8xnyo6cpg8pp/gradle-6.5"
 gradle_jvm["mappoiselect"]="/Users/didi/Library/Java/JavaVirtualMachines/corretto-1.8.0_442/Contents/Home"
 
-project_dirs["andoid_common_poi_selecter"]="/Users/didi/AndroidStudioProjects/andoid_common_poi_selecter"
-version_keys["andoid_common_poi_selecter"]="VERSION"         # Must match the key in projectA's gradle.properties
-group_keys["andoid_common_poi_selecter"]="GROUP_ID"          # Must match the key in projectA's gradle.properties
-artifact_id_keys["andoid_common_poi_selecter"]="ARTIFACT_ID" # Must match the key in projectA's gradle.properties
-gradle_configs["andoid_common_poi_selecter"]="wrapper"
+project_dirs["CommonPoiSelect"]="/Users/didi/AndroidStudioProjects/andoid_common_poi_selecter"
+version_keys["CommonPoiSelect"]="VERSION"         # Must match the key in projectA's gradle.properties
+group_keys["CommonPoiSelect"]="GROUP_ID"          # Must match the key in projectA's gradle.properties
+artifact_id_keys["CommonPoiSelect"]="ARTIFACT_ID" # Must match the key in projectA's gradle.properties
+gradle_configs["CommonPoiSelect"]="/Users/didi/.gradle/wrapper/dists/gradle-6.5-all/4061lg9ykbxtf8xnyo6cpg8pp/gradle-6.5"
+gradle_jvm["CommonPoiSelect"]="/Users/didi/Library/Java/JavaVirtualMachines/corretto-1.8.0_442/Contents/Home"
 
-project_dirs["mapelementdrawsdk"]="/Users/didi/AndroidStudioProjects/mapelementdrawsdk"
-version_keys["mapelementdrawsdk"]="VERSION"         # Must match the key in projectA's gradle.properties
-group_keys["mapelementdrawsdk"]="GROUP_ID"          # Must match the key in projectA's gradle.properties
-artifact_id_keys["mapelementdrawsdk"]="ARTIFACT_ID" # Must match the key in projectA's gradle.properties
-gradle_configs["mapelementdrawsdk"]="wrapper"
+project_dirs["mapElementDrawSdk"]="/Users/didi/AndroidStudioProjects/mapelementdrawsdk"
+version_keys["mapElementDrawSdk"]="VERSION"         # Must match the key in projectA's gradle.properties
+group_keys["mapElementDrawSdk"]="GROUP_ID"          # Must match the key in projectA's gradle.properties
+artifact_id_keys["mapElementDrawSdk"]="ARTIFACT_ID" # Must match the key in projectA's gradle.properties
+gradle_configs["mapElementDrawSdk"]="wrapper"
 
-project_dirs["poi_base_lib"]="/Users/didi/AndroidStudioProjects/poi_base_lib"
+project_dirs["poi_base_lib"]="/Users/didi/AndroidStudioProjects/poi_base_lib/poi_base_demo"
 version_keys["poi_base_lib"]="VERSION"         # Must match the key in projectA's gradle.properties
 group_keys["poi_base_lib"]="GROUP_ID"          # Must match the key in projectA's gradle.properties
 artifact_id_keys["poi_base_lib"]="ARTIFACT_ID" # Must match the key in projectA's gradle.properties
-gradle_configs["poi_base_lib"]="wrapper"
+gradle_configs["poi_base_lib"]="/Users/didi/.gradle/wrapper/dists/gradle-6.5-all/4061lg9ykbxtf8xnyo6cpg8pp/gradle-6.5"
+gradle_jvm["poi_base_lib"]="/Users/didi/Library/Java/JavaVirtualMachines/corretto-1.8.0_442/Contents/Home"
 
 project_dirs["PsgRouteChooserSdk"]="/Users/didi/AndroidStudioProjects/PsgRouteChooserSdk"
 version_keys["PsgRouteChooserSdk"]="VERSION"         # Must match the key in projectA's gradle.properties
