@@ -1,324 +1,206 @@
 #!/bin/bash
 
-# --- Configuration ---
-sketchybar_cmd="/usr/local/bin/sketchybar"
-fswatch_cmd="/usr/local/bin/fswatch" # Adjust if installed elsewhere
-search_dir="/Users/linfeng/AndroidStudioProjects"
-search_suffix="properties" # Used for filtering in find and fswatch pattern
-keyword1="ARTIFACT_ID"
-keyword2="VERSION"
-search_depth=4
-search_days=61
-item_prefix="com.versions.item."
-main_item_name="com.versions"
-popup_name="popup.$main_item_name"
+# --- Helper Functions ---
 
-# --- Debugging ---
-# Set DEBUG to 1 to enable verbose logging, 0 to disable
-DEBUG=1 # Enable logging for testing
-
-# --- Sketchybar Item Template ---
-version_item_defaults=(
-  icon=$ACTIVITY # Assuming ACTIVITY is an env var or predefined icon
-  icon.padding_left=5
-  label.padding_right=5
-  height=20
-  background.padding_left=5
-  background.padding_right=5
-)
-
-# --- Helper Function ---
-escape_for_sketchybar() {
-  printf '%s' "$1" | sed "s/'/'\\\\''/g; 1s/^/'/; \$s/\$/'/"
+# Function to display error messages and exit
+error_exit() {
+    echo "❌ Error: $1" >&2
+    # Optional: Add notification for errors as well
+    # notify "Script Error" "$1"
+    exit 1
 }
 
-# --- Logging Function ---
-# Usage: log "Your message here"
-log() {
-  if [[ "$DEBUG" -eq 1 ]]; then
-    # Get timestamp in desired log format
-    local log_time=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "[$log_time] [DEBUG] $1"
-  fi
+# Placeholder for the notification function (adapt to your system if needed)
+# Using osascript for macOS notifications
+notify() {
+  osascript -e "display notification \"$2\" with title \"$1\""
 }
 
-# --- Core Update Logic Function ---
-update_sketchybar() {
-    log "--- update_sketchybar function started ---"
 
-    # 1. Prepare for new items: Remove *old* dynamic items from the popup
-    log "Querying sketchybar for existing items..."
-    existing_items=""
-    query_output=$($sketchybar_cmd --query items 2>/dev/null)
+# --- Main Script Logic ---
 
-    jq_available=false
-    if command -v jq >/dev/null; then
-        jq_available=true
-        log "jq command found."
-        if ! jq -e '.' >/dev/null 2>&1 <<<"$query_output"; then
-            log "Warning: sketchybar query output is not valid JSON. Skipping jq processing."
-            query_output=""
-        fi
+# 1. Check arguments
+DEFAULT_SCOPE="implementation" # Define a default scope if not provided
+if [ "$#" -lt 4 ] || [ "$#" -gt 5 ]; then
+    echo "Usage: $0 <project_directory> <groupId> <artifactId> <version> [scope (default: $DEFAULT_SCOPE)]"
+    echo "Example: $0 ~/Projects/MyAwesomeApp com.google.code.gson gson 2.9.1 implementation"
+    exit 1
+fi
+
+PROJECT_DIR="$1"
+GROUP_ID="$2"
+ARTIFACT_ID="$3"
+VERSION="$4"
+SCOPE="${5:-$DEFAULT_SCOPE}" # Use provided scope or default
+
+# Input validation (basic)
+if [[ -z "$PROJECT_DIR" || -z "$GROUP_ID" || -z "$ARTIFACT_ID" || -z "$VERSION" || -z "$SCOPE" ]]; then
+    error_exit "Error: Project Directory, GroupId, ArtifactId, Version, and Scope cannot be empty."
+fi
+if [ ! -d "$PROJECT_DIR" ]; then
+    error_exit "Error: Project directory '$PROJECT_DIR' not found or is not a directory."
+fi
+# Basic validation for common invalid chars in dependency parts
+if [[ "$GROUP_ID" =~ [[:space:]\'\"] || "$ARTIFACT_ID" =~ [[:space:]\'\"] || "$VERSION" =~ [[:space:]\'\"] || "$SCOPE" =~ [[:space:]\'\"] ]]; then
+    error_exit "Error: GroupId, ArtifactId, Version, Scope should not contain spaces, single quotes, or double quotes."
+fi
+
+# Escape potential special characters for regex/sed later
+ESCAPED_GROUP_ID=$(echo "$GROUP_ID" | sed 's/\./\\./g')
+ESCAPED_ARTIFACT_ID=$(echo "$ARTIFACT_ID" | sed 's/\./\\./g')
+
+echo "🔍 Searching for build files in: $PROJECT_DIR"
+echo "🎯 Targeting Dependency: Scope='$SCOPE', Group='$GROUP_ID', Artifact='$ARTIFACT_ID', Version='$VERSION'"
+echo "---"
+
+# 2. Find all build.gradle or build.gradle.kts files recursively
+build_files=()
+while IFS= read -r file; do
+    build_files+=("$file")
+done < <(find "$PROJECT_DIR" \( -name "build.gradle" -o -name "build.gradle.kts" \) -type f)
+
+if [ ${#build_files[@]} -eq 0 ]; then
+    error_exit "No build.gradle or build.gradle.kts files found within '$PROJECT_DIR'."
+fi
+
+echo "✅ Found ${#build_files[@]} build file(s):"
+printf "   %s\n" "${build_files[@]}"
+echo "---"
+
+# 3. Process each build file
+updated_count=0
+not_found_count=0
+error_count=0
+
+# Ensure temporary file is cleaned up on script exit (including errors)
+trap 'rm -f "$TEMP_FILE"' EXIT
+
+for BUILD_FILE in "${build_files[@]}"; do
+    echo "📄 Processing File: $BUILD_FILE"
+
+    BUILD_FILE_TYPE=""
+    INDENT="    "
+    NEW_DEPENDENCY_STRING_NO_INDENT=""
+    NEW_DEPENDENCY_STRING_WITH_INDENT=""
+    EXISTING_DEP_PATTERN=""
+    EXISTING_DEP_REPLACE_PATTERN="" # Renamed for clarity
+
+    # Determine file type and format strings/patterns
+    if [[ "$BUILD_FILE" == *.kts ]]; then
+        BUILD_FILE_TYPE="kotlin"
+        NEW_DEPENDENCY_STRING_NO_INDENT="${SCOPE}(\"$GROUP_ID:$ARTIFACT_ID:$VERSION\")"
+        NEW_DEPENDENCY_STRING_WITH_INDENT="${INDENT}${NEW_DEPENDENCY_STRING_NO_INDENT}"
+        EXISTING_DEP_PATTERN="^[[:space:]]*${SCOPE}[[:space:]]*\\([[:space:]]*[\"'].*${ESCAPED_GROUP_ID}:${ESCAPED_ARTIFACT_ID}:[^\"']*"
+        EXISTING_DEP_REPLACE_PATTERN="^[[:space:]]*(${SCOPE}[[:space:]]*\\([[:space:]]*[\"']${ESCAPED_GROUP_ID}:${ESCAPED_ARTIFACT_ID}:[^\"']*[\"'][[:space:]]*\\))"
+    elif [[ "$BUILD_FILE" == *.gradle ]]; then
+        BUILD_FILE_TYPE="groovy"
+        NEW_DEPENDENCY_STRING_NO_INDENT="${SCOPE} '$GROUP_ID:$ARTIFACT_ID:$VERSION'"
+        NEW_DEPENDENCY_STRING_WITH_INDENT="${INDENT}${NEW_DEPENDENCY_STRING_NO_INDENT}"
+        EXISTING_DEP_PATTERN="^[[:space:]]*${SCOPE}[[:space:]]+[\"'].*${ESCAPED_GROUP_ID}:${ESCAPED_ARTIFACT_ID}:[^\"']*"
+        EXISTING_DEP_REPLACE_PATTERN="^[[:space:]]*(${SCOPE}[[:space:]]+[\"']${ESCAPED_GROUP_ID}:${ESCAPED_ARTIFACT_ID}:[^\"']*[\"'])"
     else
-        log "Warning: jq command not found. Popup item cleanup might be less precise."
+        echo "⚠️ Skipping file with unknown extension: $BUILD_FILE"
+        continue
     fi
 
-    if $jq_available && [[ -n "$query_output" ]]; then
-        existing_items=$(jq -r --arg POPUP "$popup_name" --arg PREFIX "$item_prefix" \
-          '.items? // [] | .[] | select(.popup? == $POPUP and (.name? // "" | startswith($PREFIX))) | .name' <<<"$query_output" 2>/dev/null)
-        if [[ $? -ne 0 ]]; then
-             log "Error running jq to find existing items. Output was: $query_output"
-             existing_items=""
+    # Basic sanity check for dependencies block
+     if ! grep -q -E '^[[:space:]]*dependencies[[:space:]]*\{' "$BUILD_FILE"; then
+         echo "ℹ️  No 'dependencies {' block found in $BUILD_FILE. Skipping dependency check for this file."
+         continue
+     fi
+
+    # Check if the dependency already exists using the simpler pattern
+    if grep -E -q -- "$EXISTING_DEP_PATTERN" "$BUILD_FILE"; then
+        echo "✅ Found existing dependency for $GROUP_ID:$ARTIFACT_ID with scope $SCOPE."
+        echo "   Attempting to update line in $BUILD_FILE..."
+
+        # Create a temporary file for awk output
+        TEMP_FILE=$(mktemp "${BUILD_FILE}.XXXXXX")
+        if [ $? -ne 0 ] || [ -z "$TEMP_FILE" ] || [ ! -f "$TEMP_FILE" ]; then
+             echo "❌ Failed to create temporary file for update. Skipping update for this file."
+             ((error_count++))
+             continue # Skip to next file
         fi
-    fi
 
-    remove_commands=""
-    items_to_remove=()
-    while IFS= read -r item; do
-      if [[ -n "$item" ]]; then
-        log "Identified old item for removal: '$item'"
-        remove_commands+=" --remove \"$item\""
-        items_to_remove+=("$item")
-      fi
-    done <<<"$existing_items"
+        # Use awk, reading from original file, writing to temporary file
+        awk -v pattern="$EXISTING_DEP_REPLACE_PATTERN" -v new_line="$NEW_DEPENDENCY_STRING_WITH_INDENT" '
+        BEGIN { in_deps = 0; updated = 0; brace_level = 0 }
+        /^[ \t]*dependencies[ \t]*\{/ { if (!in_deps) { in_deps = 1; brace_level = 1; print; next } }
 
-    if [[ -n "$remove_commands" ]]; then
-      log "Constructed removal command fragment: $remove_commands"
-      log "Executing sketchybar removal for ${#items_to_remove[@]} item(s)..."
-      eval "$sketchybar_cmd $remove_commands"
-      if [[ $? -ne 0 ]]; then
-          log "Error executing sketchybar removal command."
-      else
-          log "Sketchybar removal command executed."
-      fi
-    else
-        log "No old dynamic items found to remove."
-    fi
+        in_deps && $0 ~ pattern {
+            if (!updated) {
+                 print new_line
+                 updated = 1
+            } else {
+                 print
+            }
+             next
+        }
 
-    # 2. Find candidate files, sort by modification time (newest first), and process
-    log "Starting find command in '$search_dir'..."
-    declare -a sketchybar_add_commands
-    recent_artifact_id=""
-    recent_version=""
-    first_file_processed=true
-    file_count=0
-    processed_count=0
+        in_deps {
+            brace_level += gsub(/{/, "{")
+            brace_level -= gsub(/}/, "}")
+            if (brace_level <= 0 && /^[ \t]*\}/) {
+                 in_deps = 0
+            }
+        }
+        { print }
+        ' "$BUILD_FILE" > "$TEMP_FILE" # Read from BUILD_FILE, write to TEMP_FILE
 
-    find_output=$(find "$search_dir" -maxdepth "$search_depth" -type f -name "*.$search_suffix" -mtime "-$search_days" -exec stat -f "%m %N" {} \; | sort -rnk1 | cut -d' ' -f2-)
-    log "Find command finished. Processing results..."
+        awk_exit_code=$?
 
-    while IFS= read -r file; do
-      file_count=$((file_count + 1))
-      [[ -z "$file" ]] && continue
-      log "Processing file #${file_count}: '$file'"
-
-      # Use awk to read the file ONCE
-      awk_output=$(awk -v k1="^ *${keyword1}=" -v k2="^ *${keyword2}=" '
-        $0 ~ k1 {gsub(k1, ""); aid=$0; aid_found=1}
-        $0 ~ k2 {gsub(k2, ""); ver=$0; ver_found=1}
-        END {if (aid_found && ver_found) print aid, ver}
-      ' "$file" 2>/dev/null)
-
-      if [[ $? -ne 0 ]]; then
-          log "  Error running awk on file '$file'."
-          continue
-      fi
-
-      read -r artifact_id version <<< "$awk_output"
-
-      if [[ -n "$artifact_id" && -n "$version" ]]; then
-        processed_count=$((processed_count + 1))
-        log "  Found keywords: ARTIFAC_ID='$artifact_id', VERSION='$version'"
-
-        # --- Get Git Branch ---
-        branch_name="-" # Default if not found or not a git repo
-        file_dir=$(dirname "$file")
-        log "  Getting git info for directory: '$file_dir'"
-        # Check if it's inside a git repo and get root
-        # Redirect stderr (2>/dev/null) to avoid "fatal: not a git repository" messages
-        git_root=$(git -C "$file_dir" rev-parse --show-toplevel 2>/dev/null)
-        git_root_rc=$?
-        if [[ $git_root_rc -eq 0 && -n "$git_root" ]]; then
-            log "    Git root found: '$git_root'"
-            # Get current branch name from the repo root
-            # Redirect stderr in case of detached HEAD or other minor issues
-            current_branch=$(git -C "$git_root" rev-parse --abbrev-ref HEAD 2>/dev/null)
-            git_branch_rc=$?
-             if [[ $git_branch_rc -eq 0 && -n "$current_branch" ]]; then
-                branch_name="$current_branch"
-                log "    Git branch found: '$branch_name'"
+        # Check awk's result
+        if [ $awk_exit_code -eq 0 ]; then
+            # Awk succeeded, now check if the file actually changed
+            if cmp -s "$BUILD_FILE" "$TEMP_FILE"; then
+                 # Files are identical, awk ran but made no effective change
+                 echo "ℹ️  Update process completed but target line did not require modification (or pattern mismatch)."
+                 rm "$TEMP_FILE" # Clean up temp file
+                 ((not_found_count++)) # Count as 'not updated'
             else
-                 log "    Could not get branch name (rc=$git_branch_rc, output='$current_branch'). Using default."
-                 # Optionally try to get commit hash if branch name fails
-                 commit_hash=$(git -C "$git_root" rev-parse --short HEAD 2>/dev/null)
-                 if [[ $? -eq 0 && -n $commit_hash ]]; then
-                    branch_name="($commit_hash)" # Indicate it's a commit hash
-                    log "    Using commit hash instead: $branch_name"
+                 # Files differ, move temporary file over original
+                 mv "$TEMP_FILE" "$BUILD_FILE"
+                 if [ $? -eq 0 ]; then
+                    echo "✅ Dependency updated successfully in $BUILD_FILE"
+                    ((updated_count++))
+                 else
+                    echo "❌ Failed to overwrite original file with updated content. Check permissions."
+                    # TEMP_FILE might still exist, trap will clean it up
+                    ((error_count++))
                  fi
             fi
         else
-            log "    Not a git repository or 'git rev-parse --show-toplevel' failed (rc=$git_root_rc)."
+            # Awk failed
+            echo "❌ Failed to process/update dependency using awk (Exit code: $awk_exit_code). Original file remains unchanged."
+            rm "$TEMP_FILE" # Clean up temp file
+            ((error_count++))
         fi
-        # --- End Git Branch ---
-
-        # --- Get Shortened Timestamp ---
-        # Use stat -f %m to get Unix timestamp, then date -r to format
-        mod_unix_time=$(stat -f "%m" "$file")
-        # Format: MM/DD HH:MM (e.g., 07/26 15:30)
-        modified_time=$(date -r "$mod_unix_time" "+%m/%d %H:%M")
-        log "  Modification time (shortened): $modified_time"
-        # --- End Shortened Timestamp ---
-
-        # Construct label with time, branch, artifact, version
-        label_content="$modified_time [$branch_name] ${artifact_id}=${version}"
-        log "  Constructed label: '$label_content'"
-
-        click_content="${artifact_id} ${version}" # Keep click content simple
-
-        if $first_file_processed; then
-          log "  This is the most recent file matching criteria."
-          recent_artifact_id="$artifact_id"
-          recent_version="$version"
-          first_file_processed=false
-        fi
-
-        item_name="${item_prefix}$(echo -n "$file" | tr '/.' '__')"
-        log "  Generated sketchybar item name: '$item_name'"
-        escaped_click_content=$(escape_for_sketchybar "$click_content")
-        popup_off_cmd_str="$sketchybar_cmd --set $main_item_name popup.drawing=off"
-        escaped_popup_off_cmd=$(escape_for_sketchybar "$popup_off_cmd_str")
-
-        cmd_part=$(
-          printf -- "--add item %s %s --set %s label=%s click_script=%s " \
-            "'$item_name'" \
-            "'$popup_name'" \
-            "'$item_name'" \
-            "$(escape_for_sketchybar "$label_content")" \
-            "$(escape_for_sketchybar "echo $escaped_click_content | pbcopy; $escaped_popup_off_cmd")"
-        )
-
-        setting_cmds=""
-        for i in "${!version_item_defaults[@]}"; do
-          key="${i}"
-          value="${version_item_defaults[$i]}"
-          setting_cmds+=$(printf -- "--set '%s' %s=%s " "$item_name" "$key" "$value")
-        done
-
-        sketchybar_add_commands+=("$cmd_part $setting_cmds")
-        log "  Added commands for item '$item_name' to batch."
-      else
-          log "  Keywords not found or incomplete in '$file'."
-      fi
-    done <<< "$find_output"
-
-    log "Finished processing $file_count files found by 'find'. $processed_count files had both keywords."
-
-    # 3. Execute all accumulated sketchybar commands at once
-    if [[ ${#sketchybar_add_commands[@]} -gt 0 ]]; then
-      log "Constructing final batch 'add/set' command for ${#sketchybar_add_commands[@]} items..."
-      full_command="${sketchybar_add_commands[*]}"
-      log "Executing batch sketchybar add/set command..."
-      eval "$sketchybar_cmd $full_command"
-      if [[ $? -ne 0 ]]; then
-          log "Error executing batch sketchybar add/set command."
-      else
-          log "Batch sketchybar add/set command executed."
-      fi
     else
-        log "No new items to add to sketchybar popup."
+        # Dependency does NOT exist in this file
+        echo "ℹ️  Dependency $GROUP_ID:$ARTIFACT_ID ($SCOPE) not found in $BUILD_FILE."
+        ((not_found_count++))
     fi
-
-
-    # 4. Update the main label (remains unchanged, shows latest version + current time)
-    current_time=$(TZ="Asia/Shanghai" date "+%H:%M:%S")
-    if [[ -n "$recent_artifact_id" ]]; then
-      summary_label="$current_time: ${recent_artifact_id}/${recent_version}"
-      log "Updating main label with latest version: '$summary_label'"
-    else
-      summary_label="$current_time: N/A"
-      log "Updating main label: No recent version found."
-    fi
-
-    $sketchybar_cmd --set "$main_item_name" label="$(escape_for_sketchybar "$summary_label")"
-    if [[ $? -ne 0 ]]; then
-      log "Error setting main sketchybar label."
-    else
-      log "Main sketchybar label updated."
-    fi
-
-    log "--- update_sketchybar function finished ---"
-}
-
-# --- Main Execution ---
-
-log "Script started."
-
-# Check dependencies (add git check)
-log "Checking dependencies..."
-dependency_error=0
-if ! command -v "$sketchybar_cmd" &> /dev/null; then
-    echo "Error: sketchybar not found at '$sketchybar_cmd'. Please install or adjust the path." >&2
-    dependency_error=1
-fi
-if ! command -v "$fswatch_cmd" &> /dev/null; then
-    echo "Error: fswatch not found at '$fswatch_cmd'. Please install (brew install fswatch) or adjust the path." >&2
-    dependency_error=1
-fi
-if ! command -v jq &> /dev/null; then
-     echo "Warning: jq command not found. Popup item cleanup might be less precise. Install with 'brew install jq'." >&2
-     log "jq command not found (warning issued)."
-fi
-# Check for git command
-if ! command -v git &> /dev/null; then
-    echo "Error: git command not found. Cannot retrieve branch names." >&2
-    dependency_error=1
-fi
-
-
-if [[ $dependency_error -eq 1 ]]; then
-    log "Exiting due to missing critical dependencies."
-    exit 1
-fi
-log "Dependencies checked."
-
-# Perform initial update when the script starts
-log "Performing initial sketchybar update..."
-update_sketchybar
-
-# Start fswatch to monitor the directory
-log "Starting file system watch on '$search_dir' for '*.$search_suffix' files..."
-fswatch_args=(
-    -r # recursive
-    -o # batch output
-    --event Created
-    --event Updated
-    --event Renamed
-    --event MovedTo
-    # Match files ending exactly with .properties (escape the dot)
-    --include="\\.$search_suffix$"
-    # Add excludes for common large/binary directories if desired
-    # --exclude='/\.git/'
-    # --exclude='/build/'
-    # --exclude='/\.gradle/'
-    --latency 0.5 # Batch events occurring within 0.5s
-    "$search_dir" # Path to watch
-)
-
-log "Executing fswatch command: $fswatch_cmd ${fswatch_args[*]}"
-
-"$fswatch_cmd" "${fswatch_args[@]}" | while IFS= read -r event_batch_info || [[ -n "$event_batch_info" ]]; do
-    log "fswatch detected changes:"
-    while IFS= read -r line; do
-      log "  Event detail: $line"
-    done <<< "$event_batch_info"
-
-    log "Triggering sketchybar update due to fswatch event."
-    update_sketchybar
+    echo "---" # Separator between files
 done
 
-ret_code=$?
-log "fswatch process terminated with exit code $ret_code."
-echo "Error: fswatch process terminated unexpectedly." >&2
-exit $ret_code
+# Clean exit removes the trap
+trap - EXIT
 
+# 4. Final Summary
+echo "====== Summary ======"
+echo "Processed ${#build_files[@]} build file(s)."
+echo "✅ Successfully updated: $updated_count file(s)."
+echo "ℹ️ Dependency not found (or not updated): $not_found_count file(s)."
+echo "❌ Errors encountered (updates skipped/failed): $error_count file(s)."
+
+if [ $error_count -gt 0 ]; then
+    notify "Script Finished with Errors" "Updated $updated_count, Not Found $not_found_count, Errors $error_count dependencies."
+    exit 1
+elif [ $updated_count -gt 0 ]; then
+     notify "Script Finished Successfully" "Updated $updated_count dependencies in $PROJECT_DIR."
+     exit 0
+else
+    notify "Script Finished" "No matching dependencies found to update in $PROJECT_DIR."
+    exit 0
+fi
 
