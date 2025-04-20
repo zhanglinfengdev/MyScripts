@@ -1,0 +1,128 @@
+" 函数：获取当前项目路径并写入文件
+function! WriteProjectCwdToFile()
+  " 使用 :pwd 命令获取当前目录 (在 IdeaVim 中通常是项目根目录)
+  redir => l:pwdOutput
+  silent pwd
+  redir END
+  " 清理输出，获取纯路径
+  let l:projectPath = trim(l:pwdOutput)
+  " 对路径进行 shell 转义，防止路径中有空格或特殊字符导致问题
+  let l:escapedPath = shellescape(l:projectPath)
+  " 定义目标文件
+  let l:targetFile = '/tmp/yabai_focus_cwd.log'
+  " 执行外部 shell 命令，将转义后的路径写入文件
+  " 使用 execute 避免映射中的特殊字符问题
+  execute ':silent !echo ' . l:escapedPath . ' > ' . shellescape(l:targetFile)
+  " (可选) 可以在 IDE 中显示一条消息确认执行
+  " echo 'Project CWD written to ' . l:targetFile
+endfunction
+
+" 将函数映射到一个快捷键
+" 使用一个不太常用的组合键，避免冲突
+" 例如：<Leader>yc  (代表 Yabai Cwd) - 假设你的 Leader 键是 \
+" 你可以换成其他你喜欢的、不冲突的快捷键
+nnoremap <silent> <Leader>yc :call WriteProjectCwdToFile()<CR>
+
+" (备选方案) 如果你想用命令触发，可以定义一个命令
+command! ExportProjectCwd call WriteProjectCwdToFile()
+
+
+
+
+yabai -m signal --add event=window_focused label="获取焦点窗口CWD" action="/Users/linfeng/scripts/MyScripts/watchGDpropertyscV5.sh \$YABAI_WINDOW_ID"
+
+
+
+#!/bin/bash
+
+# ... (脚本前面的日志函数等保持不变) ...
+
+LOG_FILE="/tmp/get_focused_cwd.log"
+OUTPUT_FILE="/tmp/yabai_focus_cwd.log"
+
+# ... (get_kitty_cwd 等其他函数保持不变) ...
+
+# 新的 Android Studio 处理函数
+get_android_studio_cwd() {
+  local app_pid="$1"
+  local window_id="$2" # 可能不需要 window_id 了
+
+  log "Attempting CWD for Android Studio (PID: $app_pid) via IdeaVim shortcut trigger"
+
+  # !! 定义你在 .ideavimrc 中映射的快捷键 !!
+  # 假设 Leader 是反斜杠 '\'，快捷键是 yc
+  # AppleScript 中表示特殊键需要技巧，用 keystroke 通常更容易
+  # 反斜杠需要转义两次：一次为 bash 字符串，一次为 AppleScript 字符串
+  local leader_key_char="\\"
+  local key_sequence="yc"
+
+  # 使用 osascript 执行 AppleScript 来模拟按键
+  osascript -e "
+    tell application \"System Events\"
+      -- 尝试激活 Android Studio 进程确保按键发送到正确应用
+      -- Yabai 可能已经做了，但这层保险更稳妥
+      try
+        set frontmost of process \"Android Studio\" to true
+        delay 0.1 -- 短暂延迟确保窗口激活
+      on error errMsg
+        log \"AppleScript Error activating Android Studio: ${errMsg}\"
+        -- 如果激活失败，可能无法发送按键，记录错误并退出函数
+        echo \"\" > \"$OUTPUT_FILE\" # 清空输出文件表示失败
+        log \"Clearing output file due to activation failure.\"
+        return 1 # 返回错误码
+      end try
+
+      -- 告诉特定进程接收按键
+      tell process \"Android Studio\"
+        -- 发送 Leader 键 (这里假设是反斜杠)
+        keystroke \"${leader_key_char}\"
+        delay 0.05 -- Leader 后可能需要极短延迟
+        -- 发送后续按键
+        keystroke \"${key_sequence}\"
+      end tell
+    end tell
+  " >> "$LOG_FILE" 2>&1 # 将 AppleScript 的标准输出和错误都追加到日志
+
+  local osascript_exit_code=$?
+  if [[ $osascript_exit_code -eq 0 ]]; then
+    log "Successfully triggered IdeaVim shortcut '\${leader_key_char}${key_sequence}' for Android Studio (PID: $app_pid). IdeaVim should now write CWD to $OUTPUT_FILE."
+    # 注意：这里脚本 *不再* 尝试确定 CWD 或写入 $OUTPUT_FILE
+    # 这个工作已经委托给 IdeaVim 了。
+    # 我们甚至可以稍微等待一下，以增加 IdeaVim 完成写入的机会，但这可能不必要
+    # sleep 0.1
+  else
+    log "Error: Failed to trigger IdeaVim shortcut via AppleScript (Exit Code: $osascript_exit_code)."
+    # 如果触发失败，最好清空输出文件，避免使用旧的/错误的 CWD
+    echo "" > "$OUTPUT_FILE"
+    log "Clearing output file due to trigger failure."
+  fi
+
+  # 函数现在不直接返回 CWD，只是负责触发
+  return $osascript_exit_code
+}
+
+# ... (脚本的主逻辑部分，根据 app_name 调用不同的函数) ...
+
+# 主逻辑示例调整：
+# ...
+elif [[ "$app_name" == "Android Studio" ]]; then
+  get_android_studio_cwd "$focused_pid" "$focused_window_id"
+  # 注意：这里不再需要检查 get_android_studio_cwd 的返回值来设置 CWD
+  # 因为该函数内部失败时会清空 OUTPUT_FILE，成功时由 IdeaVim 写入
+  # final_cwd=$(cat "$OUTPUT_FILE") # 可以不读取，让下游脚本读取
+else
+  # ... (其他应用或通用 lsof 逻辑) ...
+fi
+
+# ... (脚本结尾写入 CWD 或日志) ...
+# 如果主逻辑依赖 final_cwd 变量，则需要在调用 get_android_studio_cwd 后读取文件：
+# final_cwd=$(cat "$OUTPUT_FILE")
+# log "Final CWD determined: $final_cwd"
+# echo "$final_cwd" > "$OUTPUT_FILE" # 如果上面读取了，这里可能需要再次写入，或者调整逻辑
+
+# 更好的逻辑：让触发脚本只负责触发和记录日志，让下游脚本总是读取 $OUTPUT_FILE
+log "Script finished. CWD (if successful) should be in $OUTPUT_FILE"
+
+# --- Script End ---
+
+
