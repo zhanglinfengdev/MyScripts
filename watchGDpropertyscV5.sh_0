@@ -32,6 +32,41 @@ command! ExportProjectCwd call WriteProjectCwdToFile()
 yabai -m signal --add event=window_focused label="获取焦点窗口CWD" action="/Users/linfeng/scripts/MyScripts/watchGDpropertyscV5.sh \$YABAI_WINDOW_ID"
 
 
+解释:
+WriteProjectCwdToFile() 函数使用 Vim 的 :pwd 命令，这在 IdeaVim 中通常会返回当前项目的根目录。
+redir 用来捕获 :pwd 的输出。
+trim() 清除路径前后可能存在的空格。
+shellescape() 对路径进行处理，确保在 shell 命令中能被正确识别（例如，包含空格的路径会被引号包起来）。
+:silent !echo ... > ... 执行外部 shell 命令，将路径覆盖写入到 /tmp/yabai_focus_cwd.log。
+nnoremap <silent> <Leader>yc ... 将这个函数绑定到 Normal 模式下的 <Leader>yc 快捷键。请确保你的 Leader 键已设置（默认为 \），并选择一个不冲突的快捷键。
+重要: 修改 .ideavimrc 后，需要重启 Android Studio 或在 Android Studio 内执行 :source ~/.ideavimrc 来使配置生效。
+步骤二：修改 get_focused_cwd.sh 脚本
+
+编辑你的 get_focused_cwd.sh 脚本，找到 get_android_studio_cwd() 函数（或者类似的针对 Android Studio 的处理逻辑），将其替换为以下内容：
+
+解释:
+get_android_studio_cwd 函数现在使用 osascript。
+它首先尝试确保 Android Studio 是最前端的应用。
+然后，tell application "System Events" 和 tell process "Android Studio" 指示系统事件将按键发送给 Android Studio 进程。
+keystroke 用于模拟按下你在 .ideavimrc 中定义的快捷键 (<Leader>yc)。你需要确保 leader_key_char 和 key_sequence 与你的设置完全匹配。模拟 Leader 键有时需要试验。如果 \ 不行，试试 key code 42 (这是美式键盘 \ 的 key code)。
+脚本现在不直接计算或写入 CWD 到 $OUTPUT_FILE。它只是触发 IdeaVim 去做这件事。
+增加了错误处理：如果 osascript 执行失败（例如，找不到 Android Studio 进程），它会记录错误并清空 $OUTPUT_FILE，防止下游脚本用到过期的路径。
+优势:
+
+准确性: IdeaVim 内部能够准确获取项目根目录。
+可靠性: 比 lsof 或猜测方法可靠得多。
+集成度: 利用了你已经使用的 IdeaVim 插件。
+注意事项与调试:
+
+快捷键冲突: 确保你在 .ideavimrc 中选择的快捷键不会与 Android Studio 或系统快捷键冲突。
+Leader 键: 确保你知道你的 Leader 键是什么，并在脚本中正确表示。如果 Leader 键模拟困难，可以考虑在 .ideavimrc 中映射到一个不带 Leader 的、更复杂的组合键（例如 Ctrl+Alt+Shift+Y），然后在 AppleScript 中使用 key code 配合 using {control down, option down, shift down} 来模拟。
+AppleScript 权限: 首次运行此脚本触发 Android Studio 时，macOS 可能会弹出权限请求，询问是否允许你的终端（或运行脚本的应用）控制“System Events”或“Android Studio”。你需要授权。检查 系统设置 -> 隐私与安全性 -> 辅助功能，确保你的终端或相关应用有权限。
+延迟 (delay): AppleScript 中的 delay 值可能需要根据你的系统速度进行微调。太短可能导致按键发送失败，太长则会感觉卡顿。
+测试:
+先在 Android Studio 中手动按下你定义的快捷键 (<Leader>yc)，确认 /tmp/yabai_focus_cwd.log 文件被正确创建并写入了项目路径。
+然后聚焦到 Android Studio，让 Yabai 自动触发脚本，检查日志 (/tmp/get_focused_cwd.log) 看 osascript 是否成功执行，以及最终的 /tmp/yabai_focus_cwd.log 是否被更新。
+这个方法虽然设置起来稍微复杂一点，但一旦成功，就能非常可靠地解决 Android Studio (以及其他基于 IntelliJ 的 IDE，如 IntelliJ IDEA, PyCharm, WebStorm 等，只需在相应 get_X_cwd 函数中修改
+
 
 #!/bin/bash
 
