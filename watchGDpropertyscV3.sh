@@ -7,7 +7,7 @@ set -euo pipefail
 sketchybar_cmd="/usr/local/bin/sketchybar"
 fswatch_cmd="/usr/local/bin/fswatch"   # Adjust if installed elsewhere
 search_dir="/Users/didi/AndroidStudioProjects" # Directory to search within
-search_suffix="properties"             # File suffix to look for (e.g., gradle.properties)
+search_suffix="gradle.properties"             # File suffix to look for (e.g., gradle.properties)
 keyword1="ARTIFACT_ID"                 # Keyword for Artifact ID in properties file
 keyword2="VERSION"                     # Keyword for Version in properties file
 keyword3="GROUP_ID"                    # Keyword for Group ID in properties file
@@ -117,7 +117,7 @@ update_sketchybar() {
       done
 
       # Check if the pipe failed (e.g., jq error)
-      if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
+      if [[ ${pipestatus[1]} -ne 0 ]]; then
           log "Error: jq command failed during item cleanup processing. Skipping removal."
           remove_commands="" # Clear commands if jq failed
           items_to_remove=()
@@ -156,7 +156,8 @@ update_sketchybar() {
   local -a processed_item_names # Array to hold names of items added/updated in this run
 
   # Use find with stat for macOS compatibility and efficiency, sort by modification time descending
-  find "$search_dir" -maxdepth "$search_depth" -type f -name "*.$search_suffix" -mtime "-$search_days" \
+  # find "$search_dir" -maxdepth "$search_depth" -type f -name "*.$search_suffix" -mtime "-$search_days" \
+  find "$search_dir" -maxdepth "$search_depth" -type f -name "$search_suffix" -mtime "-$search_days" \
        -exec stat -f '%m %N' {} + | sort -rnk1 | cut -d' ' -f2- |
   while IFS= read -r file; do
     # Check if file still exists (might be deleted between find and processing)
@@ -179,7 +180,8 @@ update_sketchybar() {
         END {if (aid_found && ver_found) print gid "\n" aid "\n" ver}
       ' "$file" 2>/dev/null) # Redirect stderr to avoid clutter
 
-    if [[ $? -ne 0 ]]; then
+    log "---------- $?"
+    if [[ $? -ne 0 || -z "$awk_output" ]]; then
       log "  Error running awk on file '$file'. Skipping."
       continue
     fi
@@ -192,6 +194,7 @@ update_sketchybar() {
       read -r version
     } <<<"$awk_output"
 
+    log "$([ -n "$artifact_id" && -n "$version" ])"
     # Check if essential keywords were extracted
     if [[ -n "$artifact_id" && -n "$version" ]]; then
       processed_count=$((processed_count + 1))
@@ -259,12 +262,13 @@ update_sketchybar() {
       # --- End Item Details ---
 
       # --- Prepare click_script (if possible) ---
+      cur_as_project_path="$(/Users/didi/scripts/get_as_project_dir.sh)"
       local escaped_click_script_final=""
-      if [[ -n "$project_dir_for_adder" && -f "$ADD_DEPENDENCY_SCRIPT" && -x "$ADD_DEPENDENCY_SCRIPT" ]]; then
+      if [[ -n "$cur_as_project_path" && -f "$ADD_DEPENDENCY_SCRIPT" && -x "$ADD_DEPENDENCY_SCRIPT" ]]; then
           # Escape all components needed for the command executed by click_script
           local escaped_add_script_path escaped_project_dir escaped_group escaped_artifact escaped_version
           escaped_add_script_path=$(escape_for_sketchybar "$ADD_DEPENDENCY_SCRIPT")
-          escaped_project_dir=$(escape_for_sketchybar "$project_dir_for_adder")
+          escaped_project_dir=$(escape_for_sketchybar "$cur_as_project_path")
           escaped_group=$(escape_for_sketchybar "$group_id")
           escaped_artifact=$(escape_for_sketchybar "$artifact_id")
           escaped_version=$(escape_for_sketchybar "$version")
@@ -281,7 +285,7 @@ update_sketchybar() {
           # Use printf for safe concatenation, ensuring spaces between arguments
           click_command=$(printf '%s %s %s %s %s && %s' \
               "$ADD_DEPENDENCY_SCRIPT" \
-              "$project_dir_for_adder" \
+              "$cur_as_project_path" \
               "$group_id" \
               "$artifact_id" \
               "$version" \
@@ -293,7 +297,7 @@ update_sketchybar() {
           log "  Prepared click script. Command to run: $click_command"
           # log "  Final escaped click script for sketchybar: $escaped_click_script_final" # Can be noisy
       else
-          if [[ -z "$project_dir_for_adder" ]]; then
+          if [[ -z "$cur_as_project_path" ]]; then
               log "  Skipping click_script for '$item_name': Project directory couldn't be determined."
           else
               log "  Skipping click_script for '$item_name': Adder script '$ADD_DEPENDENCY_SCRIPT' not found or not executable."
@@ -340,9 +344,9 @@ update_sketchybar() {
   done # End of while loop processing files
 
   # Check pipe status for the find | sort | cut | while loop
-  # PIPESTATUS array holds exit codes of pipeline components
-  if [[ ${PIPESTATUS[0]} -ne 0 || ${PIPESTATUS[1]} -ne 0 || ${PIPESTATUS[2]} -ne 0 ]]; then
-     log "Warning: Error occurred during the 'find | sort | cut' pipeline (Exit codes: ${PIPESTATUS[*]}). Results might be incomplete."
+  # pipestatus array holds exit codes of pipeline components
+  if [[ ${pipestatus[1]} -ne 0 || ${pipestatus[2]} -ne 0 || ${pipestatus[3]} -ne 0 ]]; then
+     log "Warning: Error occurred during the 'find | sort | cut' pipeline (Exit codes: ${pipestatus[*]}). Results might be incomplete."
   fi
 
   log "Finished processing $file_count files found by 'find'. $processed_count files had required keywords."
@@ -385,8 +389,8 @@ update_sketchybar() {
   # Safely set the main label using direct execution (avoiding unnecessary eval)
   local escaped_summary_label
   escaped_summary_label=$(escape_for_sketchybar "$summary_label")
-  log "Setting main item '$main_item_name' label to \"$escaped_summary_label\""
-  if $sketchybar_cmd --set "$main_item_name" label="\"$escaped_summary_label\""; then # Quote the value
+  log "Setting main item '$main_item_name' label to $escaped_summary_label"
+  if $sketchybar_cmd --set "$main_item_name" label="$escaped_summary_label"; then # Quote the value
       log "Main sketchybar label updated successfully."
   else
       log "Error setting main sketchybar label."
@@ -433,12 +437,13 @@ update_sketchybar() {
 log_dir=$(dirname "$LOG_FILE")
 mkdir -p "$log_dir"
 # Initialize log file (clear or create) only if DEBUG is enabled
-[[ "$DEBUG" -eq 1 ]] && >|"$LOG_FILE"
+# [[ "$DEBUG" -eq 1 ]] && >|"$LOG_FILE"
 
 log "Script started."
 
 # --- Dependency Checks ---
 log "Checking dependencies..."
+echo "Checking dependencies..."
 local dependency_error=0
 # Check for sketchybar
 if ! command -v "$sketchybar_cmd" &>/dev/null; then
@@ -502,6 +507,7 @@ fswatch_args=(
   --include="\\.${search_suffix}$" # Include only files with the suffix
   --exclude='/\.git/'            # Exclude common VCS dir
   --exclude='/build/'            # Exclude common build dir
+  --exclude='/src/'            # Exclude common build dir
   --exclude='/\.gradle/'         # Exclude common gradle cache dir
   --exclude='/\.idea/'           # Exclude common IDE dir
   --latency 0.5                  # Debounce interval in seconds
@@ -522,7 +528,7 @@ log "Executing fswatch command: $fswatch_cmd ${fswatch_args[*]}"
 done
 
 # Capture the exit code of fswatch (the first command in the pipe)
-local ret_code=${PIPESTATUS[0]}
+local ret_code=${pipestatus[1]}
 log "fswatch process terminated with exit code $ret_code."
 
 # Handle unexpected termination
