@@ -1,228 +1,143 @@
-#!/bin/bash
+#!/bin/zsh
+
+# Script Function: Finds Gradle build files (.gradle/.kts) in a project directory
+#                  and updates the version number of a specific dependency
+#                  (groupId:artifactId) IN-PLACE using sed, preserving scope
+#                  and quoting style.
+#                  WARNING: Modifies files directly. Assumes Git or backups exist.
+
+# --- Strict Mode & Options ---
+set -euo pipefail # Exit on error, unset var, pipe failure
 
 # --- Helper Functions ---
 
 # Function to display error messages and exit
 error_exit() {
   echo "❌ Error: $1" >&2
-  # Optional: Add notification for errors as well
-  # notify "Script Error" "$1"
   exit 1
 }
 
-# Placeholder for the notification function (adapt to your system if needed)
-# Using osascript for macOS notifications
+# Notification function (optional, checks for osascript)
 notify() {
-  osascript -e "display notification \"$2\" with title \"$1\""
+  local title="$1"
+  local message="$2"
+  if command -v osascript >/dev/null 2>&1; then
+    osascript -e "display notification \"${message}\" with title \"${title}\"" &>/dev/null || true
+  else
+    echo "ℹ️ Notification: ${title} - ${message} (osascript not found)"
+  fi
 }
 
 # --- Main Script Logic ---
 
-# 1. Check arguments
-# DEFAULT_SCOPE="implementation" # Define a default scope if not provided
-if [ "$#" -lt 4 ] || [ "$#" -gt 5 ]; then
-  echo "Usage: $0 <project_directory> <groupId> <artifactId> <version> [scope (default: $DEFAULT_SCOPE)]"
-  echo "Example: $0 ~/Projects/MyAwesomeApp com.google.code.gson gson 2.9.1 implementation"
+# 1. Check Arguments (Requires 4)
+if [ "$#" -ne 4 ]; then
+  echo "Usage: $0 <project_directory> <groupId> <artifactId> <new_version>"
+  echo "Example: $0 ~/Projects/MyAwesomeApp com.google.code.gson gson 2.9.1"
   exit 1
 fi
 
 PROJECT_DIR="$1"
 GROUP_ID="$2"
 ARTIFACT_ID="$3"
-VERSION="$4"
-# SCOPE="${5:-$DEFAULT_SCOPE}" # Use provided scope or default
+NEW_VERSION="$4"
 
-# Input validation (basic)
-# if [[ -z "$PROJECT_DIR" || -z "$GROUP_ID" || -z "$ARTIFACT_ID" || -z "$VERSION" || -z "$SCOPE" ]]; then
-if [[ -z "$PROJECT_DIR" || -z "$GROUP_ID" || -z "$ARTIFACT_ID" || -z "$VERSION" ]]; then
-  error_exit "Error: Project Directory, GroupId, ArtifactId, Version, and Scope cannot be empty."
+# 2. Input Validation
+if [[ -z "$PROJECT_DIR" || -z "$GROUP_ID" || -z "$ARTIFACT_ID" || -z "$NEW_VERSION" ]]; then
+  error_exit "Project Directory, GroupId, ArtifactId, and New Version cannot be empty."
 fi
 if [ ! -d "$PROJECT_DIR" ]; then
-  error_exit "Error: Project directory '$PROJECT_DIR' not found or is not a directory."
+  error_exit "Project directory '$PROJECT_DIR' not found or is not a directory."
 fi
-# Basic validation for common invalid chars in dependency parts
-# if [[ "$GROUP_ID" =~ [[:space:]\'\"] || "$ARTIFACT_ID" =~ [[:space:]\'\"] || "$VERSION" =~ [[:space:]\'\"] || "$SCOPE" =~ [[:space:]\'\"] ]]; then
-if [[ "$GROUP_ID" =~ [[:space:]\'\"] || "$ARTIFACT_ID" =~ [[:space:]\'\"] || "$VERSION" =~ [[:space:]\'\"] ]]; then
-  error_exit "Error: GroupId, ArtifactId, Version, Scope should not contain spaces, single quotes, or double quotes."
+# Basic validation for common invalid chars
+if [[ "$GROUP_ID" =~ [[:space:]\'\"] || "$ARTIFACT_ID" =~ [[:space:]\'\"] ]]; then
+  error_exit "GroupId and ArtifactId should not contain spaces, single quotes, or double quotes."
+fi
+# Basic version validation
+if ! [[ "$NEW_VERSION" =~ ^[a-zA-Z0-9._+-]+$ ]]; then
+   error_exit "New Version '$NEW_VERSION' contains potentially invalid characters."
 fi
 
-# Escape potential special characters for regex/sed later
-ESCAPED_GROUP_ID=$(echo "$GROUP_ID" | sed 's/\./\\./g')
-ESCAPED_ARTIFACT_ID=$(echo "$ARTIFACT_ID" | sed 's/\./\\./g')
+# Escape GroupId and ArtifactId for regex usage (dots are special in regex)
+# Using Zsh parameter expansion for efficiency
+ESCAPED_GROUP_ID=${GROUP_ID//./\\.}
+ESCAPED_ARTIFACT_ID=${ARTIFACT_ID//./\\.}
+# Version doesn't usually need escaping in the replacement part, but escape for sed pattern if needed
+ESCAPED_NEW_VERSION=${NEW_VERSION//&/\\&} # Escape & for replacement
+ESCAPED_NEW_VERSION=${ESCAPED_NEW_VERSION//\//\\/} # Escape / for replacement (if using / as delimiter)
 
 echo "🔍 Searching for build files in: $PROJECT_DIR"
-echo "🎯 Targeting Dependency: Group='$GROUP_ID', Artifact='$ARTIFACT_ID', Version='$VERSION'"
+echo "🎯 Targeting Dependency: Group='$GROUP_ID', Artifact='$ARTIFACT_ID', New Version='$NEW_VERSION'"
+echo "⚠️ WARNING: Modifying files directly in-place!"
 echo "---"
 
-# 2. Find all build.gradle or build.gradle.kts files recursively
-# build_files=()
-# while IFS= read -r file; do
-#   build_files+=("$file")
-# done < <(find "$PROJECT_DIR" \( -name "build.gradle" -o -name "build.gradle.kts" \) -type f)
+# 3. Find all build.gradle or build.gradle.kts files recursively
 build_files=( "$PROJECT_DIR"/**/(build.gradle|build.gradle.kts)(.N) )
 
 if [ ${#build_files[@]} -eq 0 ]; then
-  error_exit "No build.gradle or build.gradle.kts files found within '$PROJECT_DIR'."
+  notify "Script Info" "No build.gradle or build.gradle.kts files found within '$PROJECT_DIR'."
+  echo "ℹ️ No build.gradle or build.gradle.kts files found within '$PROJECT_DIR'."
+  exit 0 # Nothing to do
 fi
 
 echo "✅ Found ${#build_files[@]} build file(s):"
 printf "   %s\n" "${build_files[@]}"
 echo "---"
 
-# 3. Process each build file
-updated_count=0
+# 4. Process each build file using sed
+processed_count=0
+attempted_updates=0
 not_found_count=0
 error_count=0
 
-# Ensure temporary file is cleaned up on script exit (including errors)
-trap 'rm -f "$TEMP_FILE"' EXIT
+# Define the core pattern and replacement for sed
+# Pattern captures: (1: scope+space), (2: quote), (3: old_version), (4: quote matching 2)
+# Note the careful quoting to insert shell vars into the sed script
+# Using '#' as delimiter for sed's 's' command to avoid clash with '/' in versions
+SED_PATTERN="s#\([^[:space:]]\+[[:space:]]*\)\(['\"]\)${ESCAPED_GROUP_ID}:${ESCAPED_ARTIFACT_ID}:[^'\"]\+\(\2\)#\1\2${ESCAPED_GROUP_ID}:${ESCAPED_ARTIFACT_ID}:${ESCAPED_NEW_VERSION}\3#"
+GREP_PATTERN="['\"]${ESCAPED_GROUP_ID}:${ESCAPED_ARTIFACT_ID}:[^'\"]+['\"]" # Simpler pattern just to check existence
 
 for BUILD_FILE in "${build_files[@]}"; do
-  echo "📄 Processing File: $BUILD_FILE"
+  ((processed_count++))
+  echo "📄 Processing File ($processed_count/${#build_files[@]}): $BUILD_FILE"
 
-  BUILD_FILE_TYPE=""
-  INDENT="    "
-  NEW_DEPENDENCY_STRING_NO_INDENT=""
-  NEW_DEPENDENCY_STRING_WITH_INDENT=""
-  EXISTING_DEP_PATTERN=""
-  EXISTING_DEP_REPLACE_PATTERN="" # Renamed for clarity
-
-  # Determine file type and format strings/patterns
-  if [[ "$BUILD_FILE" == *.kts ]]; then
-    BUILD_FILE_TYPE="kotlin"
-    NEW_DEPENDENCY_STRING_NO_INDENT="${SCOPE}(\"$GROUP_ID:$ARTIFACT_ID:$VERSION\")"
-    NEW_DEPENDENCY_STRING_WITH_INDENT="${INDENT}${NEW_DEPENDENCY_STRING_NO_INDENT}"
-    EXISTING_DEP_PATTERN="[\"']${ESCAPED_GROUP_ID}:${ESCAPED_ARTIFACT_ID}:[^\"']*[\"']"
-    EXISTING_DEP_REPLACE_PATTERN="[\"']${ESCAPED_GROUP_ID}:${ESCAPED_ARTIFACT_ID}:[^\"']*[\"']"
-  elif [[ "$BUILD_FILE" == *.gradle ]]; then
-    BUILD_FILE_TYPE="groovy"
-    NEW_DEPENDENCY_STRING_NO_INDENT="${SCOPE} '$GROUP_ID:$ARTIFACT_ID:$VERSION'"
-    NEW_DEPENDENCY_STRING_WITH_INDENT="${INDENT}${NEW_DEPENDENCY_STRING_NO_INDENT}"
-    EXISTING_DEP_PATTERN="[\"']${ESCAPED_GROUP_ID}:${ESCAPED_ARTIFACT_ID}:[^\"']*[\"']"
-    EXISTING_DEP_REPLACE_PATTERN="[\"']${ESCAPED_GROUP_ID}:${ESCAPED_ARTIFACT_ID}:[^\"']*[\"']"
+  # Check if the dependency seems to exist in the file first (optional, but good for reporting)
+  if grep -q -E "$GREP_PATTERN" "$BUILD_FILE"; then
+    echo "   Found potential dependency line(s). Attempting in-place update..."
+    # Use sed with -i '' for in-place editing without backup (macOS/BSD style)
+    # For GNU sed, just -i is needed. Adding '' makes it portable.
+    if sed -E -i '' "$SED_PATTERN" "$BUILD_FILE"; then
+      # sed exit code 0 means command ran, but doesn't guarantee a change was made
+      # (e.g., if the version was already correct)
+      echo "   ✅ sed command executed successfully for $BUILD_FILE."
+      ((attempted_updates++))
+    else
+      echo "   ❌ sed command failed for $BUILD_FILE (Exit code: $?). File might be unchanged or corrupted."
+      ((error_count++))
+    fi
   else
-    echo "⚠️ Skipping file with unknown extension: $BUILD_FILE"
-    continue
-  fi
-
-  # Basic sanity check for dependencies block
-  if ! grep -q -E '^[[:space:]]*dependencies[[:space:]]*\{' "$BUILD_FILE"; then
-    echo "ℹ️  No 'dependencies {' block found in $BUILD_FILE. Skipping dependency check for this file."
-    continue
-  fi
-
-  # Check if the dependency already exists using the simpler pattern
-  if grep -E -q -- "$EXISTING_DEP_PATTERN" "$BUILD_FILE"; then
-    echo "✅ Found existing dependency for $GROUP_ID:$ARTIFACT_ID with scope $SCOPE."
-    echo "   Attempting to update line in $BUILD_FILE..."
-
-    pattern="[\"']$GROUP_ID:$ARTIFACT_ID:[^'\"]+[\"']"
-    replacement="'$GROUP_ID:$ARTIFACT_ID:$VERSION'"
-
-    echo "   patter: $pattern , replacement: $replacement"
-    # 使用 sed 进行替换（修改原文件，使用扩展正则）
-    sed -E -i '' "s/${pattern}/${replacement}/g" "$BUILD_FILE"
-
-    # echo "替换完成：$pattern -> $replacement"
-
-    # Create a temporary file for awk output
-    # TEMP_FILE=$(mktemp "${BUILD_FILE}.XXXXXX")
-    # if [ $? -ne 0 ] || [ -z "$TEMP_FILE" ] || [ ! -f "$TEMP_FILE" ]; then
-    #   echo "❌ Failed to create temporary file for update. Skipping update for this file."
-    #   ((error_count++))
-    #   continue # Skip to next file
-    # fi
-    #
-    # # Use awk, reading from original file, writing to temporary file
-    # awk -v pattern="$EXISTING_DEP_REPLACE_PATTERN" -v new_line="$NEW_DEPENDENCY_STRING_WITH_INDENT" '
-    #     BEGIN { in_deps = 0; updated = 0; brace_level = 0 }
-    #     /^[ \t]*dependencies[ \t]*\{/ { if (!in_deps) { in_deps = 1; brace_level = 1; print; next } }
-    #
-    #     in_deps && $0 ~ pattern {
-    #         if (!updated) {
-    #              print new_line
-    #              updated = 1
-    #         } else {
-    #              print
-    #         }
-    #          next
-    #     }
-    #
-    #     in_deps {
-    #         brace_level += gsub(/{/, "{")
-    #         brace_level -= gsub(/}/, "}")
-    #         if (brace_level <= 0 && /^[ \t]*\}/) {
-    #              in_deps = 0
-    #         }
-    #     }
-    #     { print }
-    #     ' "$BUILD_FILE" >"$TEMP_FILE" # Read from BUILD_FILE, write to TEMP_FILE
-    #
-    # awk_exit_code=$?
-    #
-    # # Check awk's result
-    # if [ $awk_exit_code -eq 0 ]; then
-    #   # Awk succeeded, now check if the file actually changed
-    #   if cmp -s "$BUILD_FILE" "$TEMP_FILE"; then
-    #     # Files are identical, awk ran but made no effective change
-    #     echo "ℹ️  Update process completed but target line did not require modification (or pattern mismatch)."
-    #     rm "$TEMP_FILE"       # Clean up temp file
-    #     ((not_found_count++)) # Count as 'not updated'
-    #   else
-    #     # Files differ, move temporary file over original
-    #     mv "$TEMP_FILE" "$BUILD_FILE"
-    #     if [ $? -eq 0 ]; then
-    #       echo "✅ Dependency updated successfully in $BUILD_FILE"
-    #       ((updated_count++))
-    #     else
-    #       echo "❌ Failed to overwrite original file with updated content. Check permissions."
-    #       # TEMP_FILE might still exist, trap will clean it up
-    #       ((error_count++))
-    #     fi
-    #   fi
-    # else
-    #   # Awk failed
-    #   echo "❌ Failed to process/update dependency using awk (Exit code: $awk_exit_code). Original file remains unchanged."
-    #   rm "$TEMP_FILE" # Clean up temp file
-    #   ((error_count++))
-    # fi
-  else
-    # Dependency does NOT exist in this file
-    echo "ℹ️  Dependency $GROUP_ID:$ARTIFACT_ID ($SCOPE) not found in $BUILD_FILE."
+    echo "   ℹ️ Dependency pattern '$GROUP_ID:$ARTIFACT_ID' not found in this file."
     ((not_found_count++))
   fi
-  echo "---" # Separator between files
+  echo "---"
 done
 
-# Clean exit removes the trap
-trap - EXIT
-
-# 4. Final Summary
+# 5. Final Summary
 echo "====== Summary ======"
-echo "Processed ${#build_files[@]} build file(s)."
-echo "✅ Successfully updated: $updated_count file(s)."
-echo "ℹ️ Dependency not found (or not updated): $not_found_count file(s)."
-echo "❌ Errors encountered (updates skipped/failed): $error_count file(s)."
+echo "Processed ${processed_count} build file(s)."
+echo "🚀 Update attempted on: $attempted_updates file(s) (check diffs for actual changes)."
+echo "ℹ️ Dependency pattern not found in: $not_found_count file(s)."
+echo "❌ Errors during sed execution: $error_count file(s)."
 
+# Determine final notification and exit code
 if [ $error_count -gt 0 ]; then
-  notify "Script Finished with Errors" "Updated $updated_count, Not Found $not_found_count, Errors $error_count dependencies."
+  notify "Dependency Update Finished with Errors" "Attempted $attempted_updates, Not Found $not_found_count, Errors $error_count. Review changes!"
   exit 1
-elif [ $updated_count -gt 0 ]; then
-  notify "Script Finished Successfully" "Updated $updated_count dependencies in $PROJECT_DIR."
+elif [ $attempted_updates -gt 0 ]; then
+  notify "Dependency Update Finished" "Attempted update for $GROUP_ID:$ARTIFACT_ID in $attempted_updates file(s). Verify with 'git diff'."
   exit 0
 else
-  notify "Script Finished" "No matching dependencies found to update in $PROJECT_DIR."
+  notify "Dependency Update Finished" "No matching dependencies found to attempt update for $GROUP_ID:$ARTIFACT_ID."
   exit 0
 fi
 
-#!/bin/zsh
-
-# 参数说明：
-# $1 = 目标文件路径
-# $2 = 要匹配的正则表达式（使用sed支持的格式）
-# $3 = 替换后的内容
-
-if [[ $# -ne 3 ]]; then
-  echo "用法: $0 文件路径 匹配模式 替换内容"
-  exit 1
-fi
