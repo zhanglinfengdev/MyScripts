@@ -55,10 +55,11 @@ echo "🎯 Targeting Dependency: Group='$GROUP_ID', Artifact='$ARTIFACT_ID', Ver
 echo "---"
 
 # 2. Find all build.gradle or build.gradle.kts files recursively
-build_files=()
-while IFS= read -r file; do
-  build_files+=("$file")
-done < <(find "$PROJECT_DIR" \( -name "build.gradle" -o -name "build.gradle.kts" \) -type f)
+# build_files=()
+# while IFS= read -r file; do
+#   build_files+=("$file")
+# done < <(find "$PROJECT_DIR" \( -name "build.gradle" -o -name "build.gradle.kts" \) -type f)
+build_files=( "$PROJECT_DIR"/**/(build.gradle|build.gradle.kts)(.N) )
 
 if [ ${#build_files[@]} -eq 0 ]; then
   error_exit "No build.gradle or build.gradle.kts files found within '$PROJECT_DIR'."
