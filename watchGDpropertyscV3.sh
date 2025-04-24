@@ -500,16 +500,17 @@ local -a fswatch_args
 fswatch_args=(
   -r                             # Recursive
   -o                             # Batch events
-  --event Created                # Trigger on creation
+  # --event Created                # Trigger on creation
   --event Updated                # Trigger on modification
-  --event Renamed                # Trigger on rename
-  --event MovedTo                # Trigger when moved into the watched dir
+  # --event Renamed                # Trigger on rename
+  # --event MovedTo                # Trigger when moved into the watched dir
   --include="\\.${search_suffix}$" # Include only files with the suffix
   --exclude='/\.git/'            # Exclude common VCS dir
   --exclude='/build/'            # Exclude common build dir
   --exclude='/src/'            # Exclude common build dir
   --exclude='/\.gradle/'         # Exclude common gradle cache dir
   --exclude='/\.idea/'           # Exclude common IDE dir
+  --exclude='build.gradle'           # Exclude common IDE dir
   --latency 0.5                  # Debounce interval in seconds
   "$search_dir"                  # The directory to watch
 )
