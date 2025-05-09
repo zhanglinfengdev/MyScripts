@@ -67,11 +67,11 @@ artifact_id_keys["poi_base_lib"]="ARTIFACT_ID" # Must match the key in projectA'
 gradle_configs["poi_base_lib"]="/Users/didi/.gradle/wrapper/dists/gradle-6.5-all/4061lg9ykbxtf8xnyo6cpg8pp/gradle-6.5"
 gradle_jvm["poi_base_lib"]="/Users/didi/Library/Java/JavaVirtualMachines/corretto-1.8.0_442/Contents/Home"
 
-project_dirs["PsgRouteChooserSdk"]="/Users/didi/AndroidStudioProjects/PsgRouteChooserSdk"
-version_keys["PsgRouteChooserSdk"]="VERSION"         # Must match the key in projectA's gradle.properties
-group_keys["PsgRouteChooserSdk"]="GROUP_ID"          # Must match the key in projectA's gradle.properties
-artifact_id_keys["PsgRouteChooserSdk"]="ARTIFACT_ID" # Must match the key in projectA's gradle.properties
-gradle_configs["PsgRouteChooserSdk"]="wrapper"
+project_dirs["psg_route_chooser"]="/Users/didi/AndroidStudioProjects/PsgRouteChooserSdk"
+version_keys["psg_route_chooser"]="VERSION"         # Must match the key in projectA's gradle.properties
+group_keys["psg_route_chooser"]="GROUP_ID"          # Must match the key in projectA's gradle.properties
+artifact_id_keys["psg_route_chooser"]="ARTIFACT_ID" # Must match the key in projectA's gradle.properties
+gradle_configs["psg_route_chooser"]="wrapper"
 
 #
 # project_dirs["libraryB"]="/Users/your_username/libs/libraryB"

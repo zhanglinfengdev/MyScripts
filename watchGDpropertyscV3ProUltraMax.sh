@@ -18,12 +18,12 @@ main_item_name="com.versions"
 popup_name="popup.$main_item_name"
 ADD_DEPENDENCY_SCRIPT="/Users/didi/scripts/watchGDadd_dependency.sh"
 PLACEHOLDER_GROUP_ID="com.example.placeholder"
-DEBUG=1
+DEBUG=0
 LOG_FILE="/tmp/sketchybar_gdversions_v3_stateful_v2.log" # Updated log file name
 
 # --- Colors ---
 COLOR_WHITE="0xffffffff"  # Default color for unchanged items
-COLOR_RED="0xffff5555"    # Color for items whose content changed since last update
+COLOR_RED="0xffed8796"    # Color for items whose content changed since last update
 COLOR_GREEN="0xff90ee90"  # Color for items after being clicked
 
 # --- Global Caches ---
@@ -34,11 +34,19 @@ declare -A item_state_cache=()
 
 # --- Sketchybar Item Template Defaults ---
 typeset -A version_item_defaults
+# version_item_defaults=(
+#   [icon.drawing]=off
+#   [icon.padding_left]=5
+#   [label.padding_right]=5
+#   [height]=20
+#   [background.padding_left]=5
+#   [background.padding_right]=5
+#   [label.color]=$COLOR_WHITE # Explicitly set default color
+# )
 version_item_defaults=(
   [icon.drawing]=off
   [icon.padding_left]=5
   [label.padding_right]=5
-  [height]=20
   [background.padding_left]=5
   [background.padding_right]=5
   [label.color]=$COLOR_WHITE # Explicitly set default color
@@ -415,7 +423,7 @@ update_sketchybar() {
 # Setup Log file directory and clear log if debug is on
 log_dir=$(dirname "$LOG_FILE")
 mkdir -p "$log_dir"
-[[ "$DEBUG" -eq 1 ]] && >|"$LOG_FILE" # Clear log file on start
+# [[ "$DEBUG" -eq 1 ]] && >|"$LOG_FILE" # Clear log file on start
 
 log "Script started (Stateful Colors Version 2)."
 log "Monitoring '$search_dir' for changes to '$search_suffix' files."

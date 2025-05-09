@@ -1,6 +1,7 @@
 #!/bin/bash
 
-echo $(cat "/Users/didi/active_as_project_path.log")
+# echo $(cat "/Users/didi/active_as_project_path.log")
+echo $(head -n 1 "/Users/didi/active_as_project_path.log")
 # 脚本：获取 Android Studio 最近打开的项目目录 (适配 V2 结构)
 # 用途：优先查找 'lastOpenedProject' 选项，如果找不到再尝试解析项目列表。
 
