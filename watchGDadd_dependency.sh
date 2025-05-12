@@ -27,6 +27,7 @@ if [ "$#" -lt 4 ] || [ "$#" -gt 5 ]; then
 fi
 
 PROJECT_DIR="$1"
+PROJECT_DIR="$(/Users/didi/scripts/get_as_project_dir.sh)" # Get current AS project
 GROUP_ID="$2"
 ARTIFACT_ID="$3"
 VERSION="$4"
@@ -52,6 +53,7 @@ ESCAPED_ARTIFACT_ID=$(echo "$ARTIFACT_ID" | sed 's/\./\\./g')
 echo "🔍 Searching for build files in: $PROJECT_DIR"
 echo "🎯 Targeting Dependency: Group='$GROUP_ID', Artifact='$ARTIFACT_ID', Version='$VERSION'"
 echo "---"
+echo "$ARTIFACT_ID:$VERSION" | pbcopy
 
 # 2. Find all build.gradle or build.gradle.kts files recursively
 # build_files=()
