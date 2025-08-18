@@ -49,3 +49,57 @@ if __name__ == "__main__":
     description: "Create, set desc, and checkout new branch"
 
 sk-COzBQaF3Q75pTZxWk3JfkvfxGx9yWp47xiBWa2HRZVZ2yWfl
+
+
+# ~/.config/lazygit/config.yml
+customCommands:
+  # 这是您已经提供的用于创建新分支的命令 (保持不变)
+  - key: "n"
+    context: "localBranches"
+    # ... (此部分内容省略)
+    command: |
+      git checkout -b "{{.Form.branchName}}" && \
+      git config branch."{{.Form.branchName}}".description "{{.Form.desc}}"
+
+  # 这是新的、用于覆写 commit 并应用模板的命令
+  - key: 'c'
+    context: 'files'
+    description: 'Commit using template with branch desc prefix'
+    command: |
+      set -e;
+      PREFIX=$(git config branch."$(git branch --show-current)".description);
+      TEMPLATE_PATH=$(git config --get commit.template);
+      if [ -n "$TEMPLATE_PATH" ] && [ -f "$TEMPLATE_PATH" ]; then
+        if [ -n "$PREFIX" ]; then
+          MSG_CONTENT="$(echo "$PREFIX: "; cat "$TEMPLATE_PATH")";
+        else
+          MSG_CONTENT="$(cat "$TEMPLATE_PATH")";
+        fi;
+        git commit --edit -m "$MSG_CONTENT";
+      else
+        git commit --edit -m "$PREFIX";
+      fi
+    loadingText: 'Opening editor...'
+
+
+
+
+
+# --------------------
+# 提交标题（必填，50字以内，建议使用类型: 简要说明）
+# 常见类型: feat | fix | docs | style | refactor | perf | test | chore
+#
+# 示例：
+# feat: 增加用户登录功能
+# fix: 修复首页加载失败的 bug
+# --------------------
+
+# 提交描述（可选，换行后写更详细的说明）
+# 示例：
+# - 增加了 JWT 鉴权逻辑
+# - 修改了 UserController 中的验证逻辑
+# --------------------
+
+# 关联 issue（可选）
+# Closes #123
+# --------------------
