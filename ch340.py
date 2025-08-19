@@ -103,3 +103,21 @@ customCommands:
 # 关联 issue（可选）
 # Closes #123
 # --------------------
+
+
+
+#!/bin/sh
+
+# 获取当前分支
+branch=$(git branch --show-current)
+
+# 获取分支描述（如果有的话）
+desc=$(git config branch."$branch".description)
+
+# 如果有描述，就追加到 commit message 模板里
+if [ -n "$desc" ]; then
+    echo "" >> "$1"
+    echo "Branch: $branch" >> "$1"
+    echo "Description: $desc" >> "$1"
+fi
+
